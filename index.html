@@ -104,6 +104,67 @@
     .time-value.empty { color: #c7c7cc; }
     .time-arrow { color: #c7c7cc; font-size: 18px; padding-top: 18px; }
     .time-hours { font-size: 18px; }
+    .time-edit-btn {
+      display: block;
+      margin: 6px auto 0;
+      padding: 3px 10px;
+      background: #f2f2f7;
+      border: none;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #007aff;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    /* Time picker modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-sheet {
+      background: white;
+      width: 100%;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 24px 40px;
+    }
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .time-input {
+      width: 100%;
+      padding: 16px;
+      font-size: 32px;
+      font-weight: 700;
+      text-align: center;
+      border: 1.5px solid #e5e5e7;
+      border-radius: 14px;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 16px;
+    }
+    .time-input:focus { border-color: #007aff; }
+    .modal-btn-row { display: flex; gap: 10px; }
+    .modal-btn {
+      flex: 1;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .modal-btn-cancel { background: #f2f2f7; color: #1d1d1f; }
+    .modal-btn-ok     { background: #007aff; color: white; }
 
     /* Buttons */
     .btn-row { display: flex; gap: 12px; }
@@ -308,11 +369,13 @@
       <div class="time-block">
         <div class="time-label">出勤</div>
         <div class="time-value empty" id="dispIn">--:--</div>
+        <button class="time-edit-btn" onclick="openTimePicker('in')">✏️ 修正</button>
       </div>
       <div class="time-arrow">→</div>
       <div class="time-block">
         <div class="time-label">退勤</div>
         <div class="time-value empty" id="dispOut">--:--</div>
+        <button class="time-edit-btn" onclick="openTimePicker('out')">✏️ 修正</button>
       </div>
       <div class="time-arrow">｜</div>
       <div class="time-block">
@@ -324,6 +387,18 @@
     <div class="btn-row">
       <button class="btn btn-in"  id="btnIn"  onclick="clockIn()">🟢 出勤</button>
       <button class="btn btn-out" id="btnOut" onclick="clockOut()" disabled>🔴 退勤</button>
+    </div>
+  </div>
+
+  <!-- Time picker modal -->
+  <div class="modal-overlay" id="timeModal">
+    <div class="modal-sheet">
+      <div class="modal-title" id="modalTitle">時刻を設定</div>
+      <input type="time" class="time-input" id="timePickerInput">
+      <div class="modal-btn-row">
+        <button class="modal-btn modal-btn-cancel" onclick="closeTimePicker()">キャンセル</button>
+        <button class="modal-btn modal-btn-ok"     onclick="confirmTimePicker()">設定する</button>
+      </div>
     </div>
   </div>
 
@@ -506,6 +581,75 @@ function editReport() {
   document.getElementById('reportInput').value = rec?.report || '';
   document.getElementById('reportSavedCard').style.display = 'none';
   document.getElementById('reportFormCard').style.display  = 'block';
+}
+
+// ── Time picker ────────────────────────────────────────────
+let timePickerTarget = null; // 'in' or 'out'
+
+function openTimePicker(target) {
+  timePickerTarget = target;
+  const rec = getRecord(todayKey());
+  const now = new Date();
+
+  // 現在記録されている時刻があればそれをセット、なければ現在時刻
+  let defaultTime;
+  if (target === 'in' && rec?.clockIn) {
+    const d = new Date(rec.clockIn);
+    defaultTime = pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } else if (target === 'out' && rec?.clockOut) {
+    const d = new Date(rec.clockOut);
+    defaultTime = pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } else {
+    defaultTime = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  }
+
+  document.getElementById('modalTitle').textContent =
+    target === 'in' ? '🟢 出勤時刻を設定' : '🔴 退勤時刻を設定';
+  document.getElementById('timePickerInput').value = defaultTime;
+  document.getElementById('timeModal').classList.add('show');
+}
+
+function closeTimePicker() {
+  document.getElementById('timeModal').classList.remove('show');
+  timePickerTarget = null;
+}
+
+function confirmTimePicker() {
+  const val = document.getElementById('timePickerInput').value;
+  if (!val) { toast('⚠️ 時刻を入力してください'); return; }
+
+  const [h, m] = val.split(':').map(Number);
+  const today  = new Date();
+  today.setHours(h, m, 0, 0);
+  const ts = today.getTime();
+
+  const rec = getRecord(todayKey());
+
+  if (timePickerTarget === 'in') {
+    // 退勤より後にはできない
+    if (rec?.clockOut && ts >= rec.clockOut) {
+      toast('⚠️ 出勤時刻は退勤より前にしてください'); return;
+    }
+    upsert({clockIn: ts});
+    toast('✅ 出勤時刻を ' + val + ' に設定しました');
+  } else {
+    // 出勤より前にはできない
+    if (rec?.clockIn && ts <= rec.clockIn) {
+      toast('⚠️ 退勤時刻は出勤より後にしてください'); return;
+    }
+    upsert({clockOut: ts});
+    toast('🏁 退勤時刻を ' + val + ' に設定しました');
+  }
+
+  closeTimePicker();
+  refreshToday();
+  // 退勤を設定した場合、日報欄を表示
+  if (timePickerTarget === 'out') {
+    const updated = getRecord(todayKey());
+    if (!updated?.report) {
+      document.getElementById('reportFormCard').style.display = 'block';
+    }
+  }
 }
 
 // ── Tab switch ─────────────────────────────────────────────

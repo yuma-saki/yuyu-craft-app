@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>データインポート | ゆうゆうクラフト</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+      background: #f5f5f7;
+      padding: 32px 20px;
+      color: #1d1d1f;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .sub { font-size: 14px; color: #6e6e73; margin-bottom: 20px; }
+    .record-list {
+      font-size: 14px;
+      line-height: 2;
+      color: #3a3a3c;
+    }
+    .btn-import {
+      width: 100%;
+      padding: 20px;
+      background: #007aff;
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-import:active { opacity: 0.8; }
+    .btn-cancel {
+      width: 100%;
+      padding: 16px;
+      background: #f2f2f7;
+      color: #6e6e73;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .done {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .done-icon { font-size: 56px; margin-bottom: 16px; }
+    .done-text { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .done-sub { font-size: 14px; color: #6e6e73; }
+  </style>
+</head>
+<body>
+
+<div class="card" id="mainCard">
+  <h1>📥 出勤記録インポート</h1>
+  <p class="sub">2026年4月分（20日分）のデータをアプリに取り込みます。<br>今日（4/25）の記録はそのまま保持されます。</p>
+
+  <div class="record-list">
+    4/01（水）08:00 → 17:00<br>
+    4/02（木）08:00 → 17:00<br>
+    4/03（金）08:00 → 17:00<br>
+    4/04（土）08:00 → 17:00<br>
+    4/06（月）08:00 → 17:00<br>
+    4/07（火）08:00 → 17:00<br>
+    4/08（水）08:00 → 17:00<br>
+    4/09（木）08:00 → 16:00<br>
+    4/10（金）09:00 → 17:15<br>
+    4/13（月）08:00 → 17:00<br>
+    4/14（火）08:00 → 17:00<br>
+    4/15（水）08:00 → 17:00<br>
+    4/16（木）08:00 → 17:00<br>
+    4/17（金）08:00 → 17:00<br>
+    4/20（月）08:00 → 17:00<br>
+    4/21（火）08:00 → 17:00<br>
+    4/22（水）08:00 → 17:00<br>
+    4/23（木）13:00 → 17:00　休憩なし<br>
+    4/24（金）08:30 → 17:00<br>
+    4/25（土）既存データ保持
+  </div>
+
+  <button class="btn-import" onclick="doImport()">✅ インポートする</button>
+  <button class="btn-cancel" onclick="location.href='./index.html'">キャンセル</button>
+</div>
+
+<script>
+const DATA = {"records":[{"date":"2026-04-01","clockIn":1774998000000,"clockOut":1775030400000},{"date":"2026-04-02","clockIn":1775084400000,"clockOut":1775116800000},{"date":"2026-04-03","clockIn":1775170800000,"clockOut":1775203200000},{"date":"2026-04-04","clockIn":1775257200000,"clockOut":1775289600000},{"date":"2026-04-06","clockIn":1775430000000,"clockOut":1775462400000},{"date":"2026-04-07","clockIn":1775516400000,"clockOut":1775548800000},{"date":"2026-04-08","clockIn":1775602800000,"clockOut":1775635200000},{"date":"2026-04-09","clockIn":1775689200000,"clockOut":1775718000000},{"date":"2026-04-10","clockIn":1775779200000,"clockOut":1775808900000},{"date":"2026-04-13","clockIn":1776034800000,"clockOut":1776067200000},{"date":"2026-04-14","clockIn":1776121200000,"clockOut":1776153600000},{"date":"2026-04-15","clockIn":1776207600000,"clockOut":1776240000000},{"date":"2026-04-16","clockIn":1776294000000,"clockOut":1776326400000},{"date":"2026-04-17","clockIn":1776380400000,"clockOut":1776412800000},{"date":"2026-04-20","clockIn":1776639600000,"clockOut":1776672000000},{"date":"2026-04-21","clockIn":1776726000000,"clockOut":1776758400000},{"date":"2026-04-22","clockIn":1776812400000,"clockOut":1776844800000},{"date":"2026-04-23","clockIn":1776916800000,"clockOut":1776931200000,"breakOff":true},{"date":"2026-04-24","clockIn":1776987000000,"clockOut":1777017600000},{"date":"2026-04-25","clockIn":1777071600000,"clockOut":1777104602549,"report":"新洋遠山邸　現場で棚の背板手直し\n新洋赤嶺邸　棚製作中　2台"}]};
+
+const KEY = 'yuyucraft_worklog_v1';
+
+function doImport() {
+  try {
+    // 既存データを読み込み
+    let existing = { records: [] };
+    try { existing = JSON.parse(localStorage.getItem(KEY)) || { records: [] }; } catch(e) {}
+
+    // 新データで既存を上書き（日付ベースでマージ）
+    const merged = [...DATA.records];
+    existing.records.forEach(r => {
+      if (!merged.find(m => m.date === r.date)) {
+        merged.push(r); // 新データにない日付だけ追加
+      }
+    });
+    merged.sort((a, b) => a.date.localeCompare(b.date));
+
+    localStorage.setItem(KEY, JSON.stringify({ records: merged }));
+
+    // 完了画面に切り替え
+    document.getElementById('mainCard').innerHTML = `
+      <div class="done">
+        <div class="done-icon">🎉</div>
+        <div class="done-text">インポート完了！</div>
+        <div class="done-sub" style="margin-bottom:24px;">${merged.length}件の記録を保存しました</div>
+        <button class="btn-import" onclick="location.href='./index.html'" style="margin-top:0;">アプリを開く →</button>
+      </div>
+    `;
+  } catch(e) {
+    alert('エラーが発生しました: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

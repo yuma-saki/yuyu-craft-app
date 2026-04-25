@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="勤怠・日報">
+  <title>勤怠・日報 | ゆうゆうクラフト</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+
+    /* Header */
+    .header {
+      background: white;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid #e5e5e7;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; }
+    .header-time { font-size: 15px; color: #6e6e73; font-variant-numeric: tabular-nums; }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex;
+      background: white;
+      border-bottom: 1px solid #e5e5e7;
+      position: sticky;
+      top: 57px;
+      z-index: 9;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: #6e6e73;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab.active { color: #007aff; border-bottom-color: #007aff; font-weight: 700; }
+
+    /* Pages */
+    .page { display: none; padding: 20px; }
+    .page.active { display: block; }
+
+    /* Cards */
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 22px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6e6e73;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    /* Today date */
+    .today-date {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    /* Time display */
+    .time-grid {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .time-block { flex: 1; text-align: center; }
+    .time-label { font-size: 12px; color: #6e6e73; margin-bottom: 6px; }
+    .time-value {
+      font-size: 30px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #1d1d1f;
+    }
+    .time-value.empty { color: #c7c7cc; }
+    .time-arrow { color: #c7c7cc; font-size: 18px; padding-top: 18px; }
+    .time-hours { font-size: 18px; }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 12px; }
+    .btn {
+      flex: 1;
+      padding: 20px 12px;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.1s;
+      letter-spacing: 0.3px;
+    }
+    .btn:active { transform: scale(0.97); opacity: 0.85; }
+    .btn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; }
+    .btn-in  { background: #34c759; color: white; }
+    .btn-out { background: #ff3b30; color: white; }
+
+    /* Report */
+    .report-hint {
+      font-size: 13px;
+      color: #aeaeb2;
+      margin-bottom: 10px;
+    }
+    .report-textarea {
+      width: 100%;
+      min-height: 130px;
+      border: 1.5px solid #e5e5e7;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 16px;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+      line-height: 1.6;
+    }
+    .report-textarea:focus { border-color: #007aff; }
+
+    .btn-save {
+      width: 100%;
+      margin-top: 14px;
+      padding: 18px;
+      background: #007aff;
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-save:active { opacity: 0.8; }
+
+    .saved-report-text {
+      font-size: 15px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      color: #3a3a3c;
+    }
+    .btn-edit {
+      margin-top: 14px;
+      padding: 10px 18px;
+      background: #f2f2f7;
+      color: #007aff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Monthly summary */
+    .summary-row { display: flex; gap: 12px; margin-bottom: 16px; }
+    .summary-card {
+      flex: 1;
+      background: white;
+      border-radius: 14px;
+      padding: 18px 12px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .summary-num { font-size: 32px; font-weight: 700; color: #007aff; }
+    .summary-unit { font-size: 14px; font-weight: 600; color: #007aff; }
+    .summary-label { font-size: 12px; color: #6e6e73; margin-top: 4px; }
+
+    /* Record list */
+    .record-item {
+      background: white;
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .record-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .record-date { font-size: 14px; font-weight: 700; }
+    .record-hours { font-size: 13px; color: #6e6e73; }
+    .record-times { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #3a3a3c; }
+    .record-report { font-size: 13px; color: #6e6e73; white-space: pre-wrap; line-height: 1.6; }
+    .no-report { font-size: 13px; color: #ff9500; }
+
+    /* Export buttons */
+    .export-btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: opacity 0.15s;
+    }
+    .export-btn:active { opacity: 0.8; }
+    .export-invoice { background: #5856d6; color: white; }
+    .export-json    { background: #34c759; color: white; }
+    .export-save    { background: #ff9500; color: white; }
+
+    /* Empty state */
+    .empty {
+      text-align: center;
+      padding: 50px 20px;
+      color: #c7c7cc;
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-text { font-size: 15px; }
+
+    /* Month nav */
+    .month-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .month-nav-btn {
+      background: white;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 16px;
+      font-size: 18px;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .month-label { font-size: 20px; font-weight: 700; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30,30,30,0.85);
+      color: white;
+      padding: 12px 22px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.25s;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+    }
+    .toast.show { opacity: 1; }
+
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6e6e73;
+      margin: 20px 0 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔨 ゆうゆうクラフト</h1>
+  <span class="header-time" id="headerTime"></span>
+</div>
+
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('today')">📅 今日</button>
+  <button class="tab" onclick="switchTab('monthly')">📊 月次</button>
+</div>
+
+<!-- TODAY -->
+<div id="page-today" class="page active">
+
+  <div class="card">
+    <div class="card-title">今日の勤怠</div>
+    <div class="today-date" id="todayDate"></div>
+
+    <div class="time-grid">
+      <div class="time-block">
+        <div class="time-label">出勤</div>
+        <div class="time-value empty" id="dispIn">--:--</div>
+      </div>
+      <div class="time-arrow">→</div>
+      <div class="time-block">
+        <div class="time-label">退勤</div>
+        <div class="time-value empty" id="dispOut">--:--</div>
+      </div>
+      <div class="time-arrow">｜</div>
+      <div class="time-block">
+        <div class="time-label">勤務</div>
+        <div class="time-value empty time-hours" id="dispHours">--</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-in"  id="btnIn"  onclick="clockIn()">🟢 出勤</button>
+      <button class="btn btn-out" id="btnOut" onclick="clockOut()" disabled>🔴 退勤</button>
+    </div>
+  </div>
+
+  <!-- Report form (after clock-out) -->
+  <div class="card" id="reportFormCard" style="display:none;">
+    <div class="card-title">📝 今日の日報</div>
+    <div class="report-hint">物件名・作業内容・量を入力（改行で複数OK）</div>
+    <textarea class="report-textarea" id="reportInput"
+      placeholder="例：A物件  建具取付  3枚&#10;B物件  棚板加工  5枚&#10;B物件  金物調整"></textarea>
+    <button class="btn-save" onclick="saveReport()">💾 記録する</button>
+  </div>
+
+  <!-- Report saved view -->
+  <div class="card" id="reportSavedCard" style="display:none;">
+    <div class="card-title">📝 今日の日報</div>
+    <div class="saved-report-text" id="reportSavedText"></div>
+    <button class="btn-edit" onclick="editReport()">✏️ 編集</button>
+  </div>
+
+</div>
+
+<!-- MONTHLY -->
+<div id="page-monthly" class="page">
+
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="changeMonth(-1)">‹</button>
+    <div class="month-label" id="monthLabel"></div>
+    <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
+  </div>
+
+  <div class="summary-row">
+    <div class="summary-card">
+      <div><span class="summary-num" id="totalDays">0</span><span class="summary-unit"> 日</span></div>
+      <div class="summary-label">出勤日数</div>
+    </div>
+    <div class="summary-card">
+      <div><span class="summary-num" id="totalHours">0</span><span class="summary-unit"> h</span></div>
+      <div class="summary-label">総勤務時間</div>
+    </div>
+  </div>
+
+  <div id="recordList"></div>
+
+  <div class="section-label">エクスポート</div>
+  <button class="export-btn export-invoice" onclick="exportInvoice()">📋 今月の日報をコピー（請求書用）</button>
+  <button class="export-btn export-json"    onclick="exportJSON()">💾 全データを保存（Claude Code用）</button>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Storage ────────────────────────────────────────────────
+const KEY = 'yuyucraft_worklog_v1';
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || {records:[]}; }
+  catch { return {records:[]}; }
+}
+
+function save(data) {
+  localStorage.setItem(KEY, JSON.stringify(data));
+}
+
+function todayKey() {
+  const d = new Date();
+  return [d.getFullYear(), pad(d.getMonth()+1), pad(d.getDate())].join('-');
+}
+
+function getRecord(dateKey) {
+  return load().records.find(r => r.date === dateKey) || null;
+}
+
+function upsert(fields) {
+  const data = load();
+  const key  = todayKey();
+  const idx  = data.records.findIndex(r => r.date === key);
+  if (idx >= 0) data.records[idx] = {...data.records[idx], ...fields};
+  else           data.records.push({date: key, ...fields});
+  save(data);
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function pad(n) { return String(n).padStart(2,'0'); }
+
+function fmtTime(ts) {
+  if (!ts) return '--:--';
+  const d = new Date(ts);
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+function fmtHours(inTs, outTs) {
+  if (!inTs || !outTs) return '--';
+  const diff = outTs - inTs;
+  const h = Math.floor(diff/3600000);
+  const m = Math.floor((diff%3600000)/60000);
+  return h + 'h' + pad(m) + 'm';
+}
+
+const DAYS = ['日','月','火','水','木','金','土'];
+
+function dayLabel(dateStr) {
+  return DAYS[new Date(dateStr + 'T00:00:00').getDay()];
+}
+
+// ── Clock ──────────────────────────────────────────────────
+function updateHeaderTime() {
+  const d = new Date();
+  document.getElementById('headerTime').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+// ── Today UI ───────────────────────────────────────────────
+let viewMonth; // {year, month} for monthly tab
+
+function refreshToday() {
+  const d   = new Date();
+  const key = todayKey();
+  const rec = getRecord(key);
+
+  // Date label
+  document.getElementById('todayDate').textContent =
+    (d.getMonth()+1) + '月' + d.getDate() + '日（' + DAYS[d.getDay()] + '）';
+
+  const inTs  = rec?.clockIn  || null;
+  const outTs = rec?.clockOut || null;
+
+  setTimeDisp('dispIn',    inTs,  !inTs);
+  setTimeDisp('dispOut',   outTs, !outTs);
+  setTimeDisp('dispHours', null,  !(inTs && outTs), fmtHours(inTs, outTs));
+
+  document.getElementById('btnIn').disabled  = !!inTs;
+  document.getElementById('btnOut').disabled = !inTs || !!outTs;
+
+  // Report section
+  if (outTs) {
+    if (rec?.report) {
+      document.getElementById('reportFormCard').style.display  = 'none';
+      document.getElementById('reportSavedCard').style.display = 'block';
+      document.getElementById('reportSavedText').textContent   = rec.report;
+    } else {
+      document.getElementById('reportFormCard').style.display  = 'block';
+      document.getElementById('reportSavedCard').style.display = 'none';
+    }
+  } else {
+    document.getElementById('reportFormCard').style.display  = 'none';
+    document.getElementById('reportSavedCard').style.display = 'none';
+  }
+}
+
+function setTimeDisp(id, ts, isEmpty, override) {
+  const el = document.getElementById(id);
+  el.textContent = override || fmtTime(ts);
+  el.classList.toggle('empty', isEmpty);
+}
+
+// ── Actions ────────────────────────────────────────────────
+function clockIn() {
+  upsert({clockIn: Date.now()});
+  refreshToday();
+  toast('✅ 出勤しました！いってらっしゃい');
+}
+
+function clockOut() {
+  upsert({clockOut: Date.now()});
+  refreshToday();
+  toast('🏁 退勤打刻しました。お疲れ様です！');
+  setTimeout(() => document.getElementById('reportInput').focus(), 400);
+}
+
+function saveReport() {
+  const text = document.getElementById('reportInput').value.trim();
+  if (!text) { toast('⚠️ 作業内容を入力してください'); return; }
+  upsert({report: text});
+  refreshToday();
+  toast('💾 日報を保存しました！');
+}
+
+function editReport() {
+  const rec = getRecord(todayKey());
+  document.getElementById('reportInput').value = rec?.report || '';
+  document.getElementById('reportSavedCard').style.display = 'none';
+  document.getElementById('reportFormCard').style.display  = 'block';
+}
+
+// ── Tab switch ─────────────────────────────────────────────
+function switchTab(tab) {
+  ['today','monthly'].forEach(t => {
+    document.getElementById('page-'+t).classList.toggle('active', t === tab);
+  });
+  document.querySelectorAll('.tab').forEach((el,i) => {
+    el.classList.toggle('active', (i===0 && tab==='today') || (i===1 && tab==='monthly'));
+  });
+  if (tab === 'monthly') refreshMonthly();
+}
+
+// ── Monthly ────────────────────────────────────────────────
+function changeMonth(delta) {
+  viewMonth.month += delta;
+  if (viewMonth.month > 12) { viewMonth.month = 1;  viewMonth.year++; }
+  if (viewMonth.month < 1)  { viewMonth.month = 12; viewMonth.year--; }
+  refreshMonthly();
+}
+
+function refreshMonthly() {
+  const {year, month} = viewMonth;
+  const prefix = year + '-' + pad(month);
+  document.getElementById('monthLabel').textContent = year + '年' + month + '月';
+
+  const data = load();
+  const recs = data.records
+    .filter(r => r.date.startsWith(prefix))
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  const done = recs.filter(r => r.clockIn && r.clockOut);
+  document.getElementById('totalDays').textContent  = done.length;
+  const ms = done.reduce((s,r) => s+(r.clockOut-r.clockIn), 0);
+  document.getElementById('totalHours').textContent = Math.floor(ms/3600000);
+
+  const list = document.getElementById('recordList');
+  if (!recs.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">この月の記録はありません</div></div>`;
+    return;
+  }
+
+  list.innerHTML = recs.map(r => `
+    <div class="record-item">
+      <div class="record-header">
+        <div class="record-date">${r.date.slice(5).replace('-','/')}（${dayLabel(r.date)}）</div>
+        <div class="record-hours">${fmtHours(r.clockIn, r.clockOut)}</div>
+      </div>
+      <div class="record-times">${fmtTime(r.clockIn)} → ${fmtTime(r.clockOut)}</div>
+      ${r.report
+        ? `<div class="record-report">${r.report}</div>`
+        : `<div class="no-report">⚠️ 日報未入力</div>`}
+    </div>
+  `).join('');
+}
+
+// ── Export ─────────────────────────────────────────────────
+function exportInvoice() {
+  const {year, month} = viewMonth;
+  const prefix = year + '-' + pad(month);
+  const recs = load().records
+    .filter(r => r.date.startsWith(prefix) && r.report)
+    .sort((a,b) => a.date.localeCompare(b.date));
+
+  if (!recs.length) { toast('⚠️ 日報の記録がありません'); return; }
+
+  const text = recs.map(r => {
+    const d = r.date.slice(5).replace('-','/');
+    return r.report.split('\n').map(l => d + '  ' + l).join('\n');
+  }).join('\n');
+
+  copy(text);
+  toast('📋 日報をコピーしました！Claudeに貼り付けてください');
+}
+
+function exportJSON() {
+  const data = load();
+  const json = JSON.stringify(data, null, 2);
+  // ファイルとしてダウンロード（iCloud Driveに保存可能）
+  const blob = new Blob([json], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'worklog.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('💾 worklog.json を保存しました');
+}
+
+function copy(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text);
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── Init ───────────────────────────────────────────────────
+(function init() {
+  const now  = new Date();
+  viewMonth  = {year: now.getFullYear(), month: now.getMonth()+1};
+  refreshToday();
+  updateHeaderTime();
+  setInterval(updateHeaderTime, 15000);
+})();
+</script>
+</body>
+</html>

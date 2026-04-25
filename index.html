@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
+  <meta name="app-version" content="v3">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -378,9 +379,43 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
+
+    /* Update banner */
+    .update-banner {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #007aff;
+      color: white;
+      padding: 14px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 200;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .update-banner.show { display: flex; }
+    .update-btn {
+      background: white;
+      color: #007aff;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
+
+<!-- Update banner -->
+<div class="update-banner" id="updateBanner">
+  <span>🆕 新しいバージョンがあります</span>
+  <button class="update-btn" onclick="applyUpdate()">今すぐ更新</button>
+</div>
 
 <div class="header">
   <h1>🔨 ゆうゆうクラフト</h1>
@@ -821,6 +856,39 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
+// ── Service Worker & Auto Update ───────────────────────────
+let swReg = null;
+
+function applyUpdate() {
+  if (swReg?.waiting) {
+    swReg.waiting.postMessage('SKIP_WAITING');
+  }
+  window.location.reload();
+}
+
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').then(reg => {
+    swReg = reg;
+    // 新しいSWが待機中なら即バナー表示
+    if (reg.waiting) {
+      document.getElementById('updateBanner').classList.add('show');
+    }
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          document.getElementById('updateBanner').classList.add('show');
+        }
+      });
+    });
+  });
+  // SW切り替わったら自動リロード
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
+
 // ── Init ───────────────────────────────────────────────────
 (function init() {
   const now  = new Date();
@@ -828,6 +896,7 @@ function toast(msg) {
   refreshToday();
   updateHeaderTime();
   setInterval(updateHeaderTime, 15000);
+  registerSW();
 })();
 </script>
 </body>

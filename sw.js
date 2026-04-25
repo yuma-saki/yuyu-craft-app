@@ -1,4 +1,4 @@
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE   = 'yuyu-craft-' + VERSION;
 
 self.addEventListener('install', e => {

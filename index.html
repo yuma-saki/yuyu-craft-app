@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v3">
+  <meta name="app-version" content="v4">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -824,15 +824,16 @@ function exportInvoice() {
 function exportJSON() {
   const data = load();
   const json = JSON.stringify(data, null, 2);
-  // ファイルとしてダウンロード（iCloud Driveに保存可能）
+  const now  = new Date();
+  const fname = 'worklog_' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + '.json';
   const blob = new Blob([json], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = 'worklog.json';
+  a.download = fname;
   a.click();
   URL.revokeObjectURL(url);
-  toast('💾 worklog.json を保存しました');
+  toast('💾 ' + fname + ' を保存しました');
 }
 
 function copy(text) {

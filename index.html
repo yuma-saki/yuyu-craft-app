@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v5">
+  <meta name="app-version" content="v6">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -523,6 +523,22 @@
   <button class="export-btn export-invoice" onclick="exportInvoice()">📋 今月の日報をコピー（請求書用）</button>
   <button class="export-btn export-json"    onclick="exportJSON()">💾 全データを保存（Claude Code用）</button>
 
+  <div class="section-label">インポート</div>
+  <button class="export-btn" style="background:#ff9500;" onclick="openImport()">📥 過去データを読み込む</button>
+
+  <!-- Import modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal-sheet">
+      <div class="modal-title">📥 データを読み込む</div>
+      <p style="font-size:13px;color:#6e6e73;margin-bottom:14px;">JSONデータを貼り付けてください。既存のデータとマージされます。</p>
+      <textarea id="importInput" class="report-textarea" style="min-height:160px;font-size:13px;" placeholder='{"records":[...]}'></textarea>
+      <div class="modal-btn-row" style="margin-top:14px;">
+        <button class="modal-btn modal-btn-cancel" onclick="closeImport()">キャンセル</button>
+        <button class="modal-btn modal-btn-ok"     onclick="confirmImport()">読み込む</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div class="toast" id="toast"></div>
@@ -855,6 +871,36 @@ function toast(msg) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── Import ─────────────────────────────────────────────────
+function openImport() {
+  document.getElementById('importInput').value = '';
+  document.getElementById('importModal').classList.add('show');
+}
+
+function closeImport() {
+  document.getElementById('importModal').classList.remove('show');
+}
+
+function confirmImport() {
+  const raw = document.getElementById('importInput').value.trim();
+  if (!raw) { toast('⚠️ データを貼り付けてください'); return; }
+  let incoming;
+  try { incoming = JSON.parse(raw); } catch(e) { toast('⚠️ データの形式が正しくありません'); return; }
+  if (!Array.isArray(incoming.records)) { toast('⚠️ recordsが見つかりません'); return; }
+
+  const existing = load();
+  const merged   = [...incoming.records];
+  existing.records.forEach(r => {
+    if (!merged.find(m => m.date === r.date)) merged.push(r);
+  });
+  merged.sort((a,b) => a.date.localeCompare(b.date));
+  save({records: merged});
+
+  closeImport();
+  refreshMonthly();
+  toast('✅ ' + incoming.records.length + '件のデータを読み込みました！');
 }
 
 // ── Service Worker & Auto Update ───────────────────────────

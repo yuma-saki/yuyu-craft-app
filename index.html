@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v4">
+  <meta name="app-version" content="v5">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -822,15 +822,15 @@ function exportInvoice() {
 }
 
 function exportJSON() {
-  const data = load();
-  const json = JSON.stringify(data, null, 2);
-  const now  = new Date();
-  const fname = 'worklog_' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + '.json';
-  const blob = new Blob([json], {type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = fname;
+  const data  = load();
+  const json  = JSON.stringify(data, null, 2);
+  const {year, month} = viewMonth;
+  const fname = 'ゆうゆうクラフト_' + year + '年' + month + '月_出勤記録.json';
+  const blob  = new Blob([json], {type:'application/json'});
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href      = url;
+  a.download  = fname;
   a.click();
   URL.revokeObjectURL(url);
   toast('💾 ' + fname + ' を保存しました');

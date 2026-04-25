@@ -184,6 +184,40 @@
     .btn-in  { background: #34c759; color: white; }
     .btn-out { background: #ff3b30; color: white; }
 
+    /* Break toggle */
+    .break-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #f2f2f7;
+    }
+    .break-label { font-size: 14px; color: #3a3a3c; font-weight: 500; }
+    .break-toggle {
+      display: flex;
+      background: #f2f2f7;
+      border-radius: 10px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .break-btn {
+      padding: 7px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: #6e6e73;
+      transition: all 0.15s;
+    }
+    .break-btn.active {
+      background: white;
+      color: #1d1d1f;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+
     /* Report */
     .report-hint {
       font-size: 13px;
@@ -388,6 +422,14 @@
       <button class="btn btn-in"  id="btnIn"  onclick="clockIn()">🟢 出勤</button>
       <button class="btn btn-out" id="btnOut" onclick="clockOut()" disabled>🔴 退勤</button>
     </div>
+
+    <div class="break-row">
+      <span class="break-label">🍱 昼休憩</span>
+      <div class="break-toggle">
+        <button class="break-btn active" id="breakOn"  onclick="setBreak(true)">あり（1時間）</button>
+        <button class="break-btn"        id="breakOff" onclick="setBreak(false)">なし</button>
+      </div>
+    </div>
   </div>
 
   <!-- Time picker modal -->
@@ -490,9 +532,10 @@ function fmtTime(ts) {
   return pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
-function fmtHours(inTs, outTs) {
+function fmtHours(inTs, outTs, breakMin) {
   if (!inTs || !outTs) return '--';
-  const diff = outTs - inTs;
+  const diff = outTs - inTs - (breakMin || 0) * 60000;
+  if (diff <= 0) return '--';
   const h = Math.floor(diff/3600000);
   const m = Math.floor((diff%3600000)/60000);
   return h + 'h' + pad(m) + 'm';
@@ -522,15 +565,21 @@ function refreshToday() {
   document.getElementById('todayDate').textContent =
     (d.getMonth()+1) + '月' + d.getDate() + '日（' + DAYS[d.getDay()] + '）';
 
-  const inTs  = rec?.clockIn  || null;
-  const outTs = rec?.clockOut || null;
+  const inTs    = rec?.clockIn  || null;
+  const outTs   = rec?.clockOut || null;
+  const breakMin = (rec?.breakOff === true) ? 0 : 60; // デフォルト：休憩あり60分
 
   setTimeDisp('dispIn',    inTs,  !inTs);
   setTimeDisp('dispOut',   outTs, !outTs);
-  setTimeDisp('dispHours', null,  !(inTs && outTs), fmtHours(inTs, outTs));
+  setTimeDisp('dispHours', null,  !(inTs && outTs), fmtHours(inTs, outTs, breakMin));
 
   document.getElementById('btnIn').disabled  = !!inTs;
   document.getElementById('btnOut').disabled = !inTs || !!outTs;
+
+  // 休憩トグルの状態を反映
+  const hasBreak = !(rec?.breakOff === true);
+  document.getElementById('breakOn').classList.toggle('active', hasBreak);
+  document.getElementById('breakOff').classList.toggle('active', !hasBreak);
 
   // Report section
   if (outTs) {
@@ -574,6 +623,12 @@ function saveReport() {
   upsert({report: text});
   refreshToday();
   toast('💾 日報を保存しました！');
+}
+
+function setBreak(hasBreak) {
+  upsert({breakOff: !hasBreak});
+  refreshToday();
+  toast(hasBreak ? '🍱 昼休憩あり（1時間）に設定しました' : '💪 昼休憩なしに設定しました');
 }
 
 function editReport() {
@@ -683,7 +738,10 @@ function refreshMonthly() {
 
   const done = recs.filter(r => r.clockIn && r.clockOut);
   document.getElementById('totalDays').textContent  = done.length;
-  const ms = done.reduce((s,r) => s+(r.clockOut-r.clockIn), 0);
+  const ms = done.reduce((s,r) => {
+    const breakMs = (r.breakOff === true) ? 0 : 60 * 60000;
+    return s + (r.clockOut - r.clockIn) - breakMs;
+  }, 0);
   document.getElementById('totalHours').textContent = Math.floor(ms/3600000);
 
   const list = document.getElementById('recordList');
@@ -692,18 +750,21 @@ function refreshMonthly() {
     return;
   }
 
-  list.innerHTML = recs.map(r => `
+  list.innerHTML = recs.map(r => {
+    const breakMin = (r.breakOff === true) ? 0 : 60;
+    const breakLabel = (r.breakOff === true) ? '休憩なし' : '休憩1h';
+    return `
     <div class="record-item">
       <div class="record-header">
         <div class="record-date">${r.date.slice(5).replace('-','/')}（${dayLabel(r.date)}）</div>
-        <div class="record-hours">${fmtHours(r.clockIn, r.clockOut)}</div>
+        <div class="record-hours">${fmtHours(r.clockIn, r.clockOut, breakMin)} <span style="font-size:11px;color:#aeaeb2;">${breakLabel}</span></div>
       </div>
       <div class="record-times">${fmtTime(r.clockIn)} → ${fmtTime(r.clockOut)}</div>
       ${r.report
         ? `<div class="record-report">${r.report}</div>`
         : `<div class="no-report">⚠️ 日報未入力</div>`}
     </div>
-  `).join('');
+  `}).join('');
 }
 
 // ── Export ─────────────────────────────────────────────────

@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v6">
+  <meta name="app-version" content="v7">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -380,6 +380,67 @@
       letter-spacing: 0.5px;
     }
 
+    /* Past record edit button */
+    .record-edit-btn {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 4px 12px;
+      background: #f2f2f7;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #007aff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .record-edit-btn:active { opacity: 0.7; }
+
+    /* Edit modal extras */
+    .edit-field-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6e6e73;
+      margin-bottom: 6px;
+      margin-top: 14px;
+    }
+    .edit-break-toggle {
+      display: flex;
+      background: #f2f2f7;
+      border-radius: 10px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .edit-break-btn {
+      flex: 1;
+      padding: 7px 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: #6e6e73;
+      transition: all 0.15s;
+    }
+    .edit-break-btn.active {
+      background: white;
+      color: #1d1d1f;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+    .edit-report-textarea {
+      width: 100%;
+      min-height: 100px;
+      border: 1.5px solid #e5e5e7;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 15px;
+      font-family: inherit;
+      resize: vertical;
+      outline: none;
+      line-height: 1.6;
+    }
+    .edit-report-textarea:focus { border-color: #007aff; }
+
     /* Update banner */
     .update-banner {
       display: none;
@@ -526,6 +587,34 @@
   <div class="section-label">インポート</div>
   <button class="export-btn" style="background:#ff9500;" onclick="openImport()">📥 過去データを読み込む</button>
 
+  <!-- Past record edit modal -->
+  <div class="modal-overlay" id="editRecordModal">
+    <div class="modal-sheet">
+      <div class="modal-title" id="editModalTitle">✏️ 記録を編集</div>
+
+      <div class="edit-field-label">🟢 出勤時刻</div>
+      <input type="time" class="time-input" id="editInTime" style="font-size:24px;margin-bottom:0;">
+
+      <div class="edit-field-label">🔴 退勤時刻</div>
+      <input type="time" class="time-input" id="editOutTime" style="font-size:24px;margin-bottom:0;">
+
+      <div class="edit-field-label">🍱 昼休憩</div>
+      <div class="edit-break-toggle">
+        <button class="edit-break-btn active" id="editBreakOn"  onclick="setEditBreak(true)">あり（1時間）</button>
+        <button class="edit-break-btn"        id="editBreakOff" onclick="setEditBreak(false)">なし</button>
+      </div>
+
+      <div class="edit-field-label">📝 日報</div>
+      <textarea class="edit-report-textarea" id="editReport"
+        placeholder="例：A物件  建具取付  3枚&#10;B物件  棚板加工  5枚"></textarea>
+
+      <div class="modal-btn-row" style="margin-top:16px;">
+        <button class="modal-btn modal-btn-cancel" onclick="closeEditRecord()">キャンセル</button>
+        <button class="modal-btn modal-btn-ok"     onclick="saveEditRecord()">保存する</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Import modal -->
   <div class="modal-overlay" id="importModal">
     <div class="modal-sheet">
@@ -571,6 +660,14 @@ function upsert(fields) {
   const idx  = data.records.findIndex(r => r.date === key);
   if (idx >= 0) data.records[idx] = {...data.records[idx], ...fields};
   else           data.records.push({date: key, ...fields});
+  save(data);
+}
+
+function upsertByDate(dateKey, fields) {
+  const data = load();
+  const idx  = data.records.findIndex(r => r.date === dateKey);
+  if (idx >= 0) data.records[idx] = {...data.records[idx], ...fields};
+  else           data.records.push({date: dateKey, ...fields});
   save(data);
 }
 
@@ -814,8 +911,109 @@ function refreshMonthly() {
       ${r.report
         ? `<div class="record-report">${r.report}</div>`
         : `<div class="no-report">⚠️ 日報未入力</div>`}
+      <button class="record-edit-btn" onclick="openEditRecord('${r.date}')">✏️ 編集</button>
     </div>
   `}).join('');
+}
+
+// ── Past record edit ───────────────────────────────────────
+let editingDateKey = null;
+let editBreakHas   = true; // true = あり
+
+function openEditRecord(dateKey) {
+  editingDateKey = dateKey;
+  const rec = getRecord(dateKey);
+
+  // タイトル
+  const d = new Date(dateKey + 'T00:00:00');
+  const label = (d.getMonth()+1) + '月' + d.getDate() + '日（' + DAYS[d.getDay()] + '）';
+  document.getElementById('editModalTitle').textContent = '✏️ ' + label + ' を編集';
+
+  // 出勤時刻
+  if (rec?.clockIn) {
+    const ci = new Date(rec.clockIn);
+    document.getElementById('editInTime').value = pad(ci.getHours()) + ':' + pad(ci.getMinutes());
+  } else {
+    document.getElementById('editInTime').value = '';
+  }
+
+  // 退勤時刻
+  if (rec?.clockOut) {
+    const co = new Date(rec.clockOut);
+    document.getElementById('editOutTime').value = pad(co.getHours()) + ':' + pad(co.getMinutes());
+  } else {
+    document.getElementById('editOutTime').value = '';
+  }
+
+  // 休憩トグル
+  editBreakHas = !(rec?.breakOff === true);
+  updateEditBreakUI();
+
+  // 日報
+  document.getElementById('editReport').value = rec?.report || '';
+
+  document.getElementById('editRecordModal').classList.add('show');
+}
+
+function setEditBreak(hasBreak) {
+  editBreakHas = hasBreak;
+  updateEditBreakUI();
+}
+
+function updateEditBreakUI() {
+  document.getElementById('editBreakOn').classList.toggle('active', editBreakHas);
+  document.getElementById('editBreakOff').classList.toggle('active', !editBreakHas);
+}
+
+function closeEditRecord() {
+  document.getElementById('editRecordModal').classList.remove('show');
+  editingDateKey = null;
+}
+
+function saveEditRecord() {
+  if (!editingDateKey) return;
+
+  const inVal  = document.getElementById('editInTime').value;
+  const outVal = document.getElementById('editOutTime').value;
+
+  let clockIn  = null;
+  let clockOut = null;
+
+  if (inVal) {
+    const [h, m] = inVal.split(':').map(Number);
+    const d = new Date(editingDateKey + 'T00:00:00');
+    d.setHours(h, m, 0, 0);
+    clockIn = d.getTime();
+  }
+
+  if (outVal) {
+    const [h, m] = outVal.split(':').map(Number);
+    const d = new Date(editingDateKey + 'T00:00:00');
+    d.setHours(h, m, 0, 0);
+    clockOut = d.getTime();
+  }
+
+  // バリデーション
+  if (clockIn && clockOut && clockOut <= clockIn) {
+    toast('⚠️ 退勤時刻は出勤より後にしてください');
+    return;
+  }
+
+  const report = document.getElementById('editReport').value.trim();
+
+  const fields = {breakOff: !editBreakHas};
+  if (clockIn  !== null) fields.clockIn  = clockIn;
+  if (clockOut !== null) fields.clockOut = clockOut;
+  if (report) fields.report = report;
+
+  upsertByDate(editingDateKey, fields);
+  closeEditRecord();
+  refreshMonthly();
+
+  // 今日の記録を編集した場合は今日タブも更新
+  if (editingDateKey === todayKey()) refreshToday();
+
+  toast('✅ 記録を更新しました！');
 }
 
 // ── Export ─────────────────────────────────────────────────

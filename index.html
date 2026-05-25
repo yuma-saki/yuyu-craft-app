@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v7">
+  <meta name="app-version" content="v8">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -578,6 +578,11 @@
     </div>
   </div>
 
+  <button onclick="openNewRecord()"
+    style="width:100%;padding:14px;background:#34c759;color:white;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:16px;">
+    ➕ 過去の打刻を追加（忘れた日）
+  </button>
+
   <div id="recordList"></div>
 
   <div class="section-label">エクスポート</div>
@@ -591,6 +596,9 @@
   <div class="modal-overlay" id="editRecordModal">
     <div class="modal-sheet">
       <div class="modal-title" id="editModalTitle">✏️ 記録を編集</div>
+
+      <div class="edit-field-label">📅 日付</div>
+      <input type="date" class="time-input" id="editDate" style="font-size:20px;margin-bottom:0;">
 
       <div class="edit-field-label">🟢 出勤時刻</div>
       <input type="time" class="time-input" id="editInTime" style="font-size:24px;margin-bottom:0;">
@@ -612,6 +620,9 @@
         <button class="modal-btn modal-btn-cancel" onclick="closeEditRecord()">キャンセル</button>
         <button class="modal-btn modal-btn-ok"     onclick="saveEditRecord()">保存する</button>
       </div>
+      <button id="editDeleteBtn"
+        style="width:100%;margin-top:10px;padding:14px;background:#ffebe9;color:#ff3b30;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;"
+        onclick="deleteEditRecord()">🗑️ この日の記録を削除</button>
     </div>
   </div>
 
@@ -929,6 +940,9 @@ function openEditRecord(dateKey) {
   const label = (d.getMonth()+1) + '月' + d.getDate() + '日（' + DAYS[d.getDay()] + '）';
   document.getElementById('editModalTitle').textContent = '✏️ ' + label + ' を編集';
 
+  // 日付
+  document.getElementById('editDate').value = dateKey;
+
   // 出勤時刻
   if (rec?.clockIn) {
     const ci = new Date(rec.clockIn);
@@ -952,6 +966,32 @@ function openEditRecord(dateKey) {
   // 日報
   document.getElementById('editReport').value = rec?.report || '';
 
+  // 削除ボタンを表示
+  document.getElementById('editDeleteBtn').style.display = 'block';
+
+  document.getElementById('editRecordModal').classList.add('show');
+}
+
+function openNewRecord() {
+  editingDateKey = null; // null = 新規モード
+  document.getElementById('editModalTitle').textContent = '➕ 過去の打刻を追加';
+
+  // デフォルトは昨日の日付
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const ykey = [yesterday.getFullYear(), pad(yesterday.getMonth()+1), pad(yesterday.getDate())].join('-');
+  document.getElementById('editDate').value = ykey;
+
+  // デフォルト値
+  document.getElementById('editInTime').value  = '08:00';
+  document.getElementById('editOutTime').value = '17:00';
+  document.getElementById('editReport').value  = '';
+  editBreakHas = true;
+  updateEditBreakUI();
+
+  // 削除ボタンを非表示
+  document.getElementById('editDeleteBtn').style.display = 'none';
+
   document.getElementById('editRecordModal').classList.add('show');
 }
 
@@ -971,7 +1011,8 @@ function closeEditRecord() {
 }
 
 function saveEditRecord() {
-  if (!editingDateKey) return;
+  const newDate = document.getElementById('editDate').value;
+  if (!newDate) { toast('⚠️ 日付を入力してください'); return; }
 
   const inVal  = document.getElementById('editInTime').value;
   const outVal = document.getElementById('editOutTime').value;
@@ -981,14 +1022,14 @@ function saveEditRecord() {
 
   if (inVal) {
     const [h, m] = inVal.split(':').map(Number);
-    const d = new Date(editingDateKey + 'T00:00:00');
+    const d = new Date(newDate + 'T00:00:00');
     d.setHours(h, m, 0, 0);
     clockIn = d.getTime();
   }
 
   if (outVal) {
     const [h, m] = outVal.split(':').map(Number);
-    const d = new Date(editingDateKey + 'T00:00:00');
+    const d = new Date(newDate + 'T00:00:00');
     d.setHours(h, m, 0, 0);
     clockOut = d.getTime();
   }
@@ -1001,19 +1042,51 @@ function saveEditRecord() {
 
   const report = document.getElementById('editReport').value.trim();
 
+  // 日付変更時の重複チェック（自分自身以外）
+  if (newDate !== editingDateKey) {
+    const data = load();
+    const conflict = data.records.find(r => r.date === newDate);
+    if (conflict) {
+      if (!confirm(newDate + ' には既に記録があります。上書きしますか？')) return;
+      // 既存の同日付レコードを削除
+      data.records = data.records.filter(r => r.date !== newDate);
+      save(data);
+    }
+    // 元のレコード（編集モードの場合）も削除
+    if (editingDateKey) {
+      const d2 = load();
+      d2.records = d2.records.filter(r => r.date !== editingDateKey);
+      save(d2);
+    }
+  }
+
   const fields = {breakOff: !editBreakHas};
   if (clockIn  !== null) fields.clockIn  = clockIn;
   if (clockOut !== null) fields.clockOut = clockOut;
   if (report) fields.report = report;
 
-  upsertByDate(editingDateKey, fields);
+  upsertByDate(newDate, fields);
   closeEditRecord();
   refreshMonthly();
 
-  // 今日の記録を編集した場合は今日タブも更新
-  if (editingDateKey === todayKey()) refreshToday();
+  // 今日の記録に影響した場合は今日タブも更新
+  if (newDate === todayKey() || editingDateKey === todayKey()) refreshToday();
 
-  toast('✅ 記録を更新しました！');
+  toast('✅ ' + newDate + ' の記録を保存しました！');
+}
+
+function deleteEditRecord() {
+  if (!editingDateKey) return;
+  if (!confirm(editingDateKey + ' の記録を削除しますか？\nこの操作は取り消せません。')) return;
+
+  const data = load();
+  data.records = data.records.filter(r => r.date !== editingDateKey);
+  save(data);
+
+  closeEditRecord();
+  refreshMonthly();
+  if (editingDateKey === todayKey()) refreshToday();
+  toast('🗑️ 削除しました');
 }
 
 // ── Export ─────────────────────────────────────────────────

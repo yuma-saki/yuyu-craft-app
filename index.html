@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v8">
+  <meta name="app-version" content="v9">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -573,8 +573,18 @@
       <div class="summary-label">出勤日数</div>
     </div>
     <div class="summary-card">
-      <div><span class="summary-num" id="totalHours">0</span><span class="summary-unit"> h</span></div>
+      <div id="totalHoursDisp" style="font-size:24px;font-weight:700;color:#007aff;">--</div>
       <div class="summary-label">総勤務時間</div>
+    </div>
+  </div>
+  <div style="background:white;border-radius:14px;padding:14px 18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:13px;color:#3a3a3c;font-weight:600;">🕐 通常勤務（8h以内／日）</span>
+      <span id="normalHoursDisp" style="font-size:15px;font-weight:700;color:#34c759;">--</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;color:#3a3a3c;font-weight:600;">⏰ 残業（8h超／×1.25）</span>
+      <span id="overtimeHoursDisp" style="font-size:15px;font-weight:700;color:#ff9500;">--</span>
     </div>
   </div>
 
@@ -885,6 +895,27 @@ function changeMonth(delta) {
   refreshMonthly();
 }
 
+// 勤務時間をミリ秒で返す（通常・残業に分解）
+// 1日8時間を超えた分が残業
+const NORMAL_LIMIT_MS = 8 * 3600000; // 8時間
+
+function calcWorkMs(r) {
+  if (!r.clockIn || !r.clockOut) return { totalMs: 0, normalMs: 0, overtimeMs: 0 };
+  const breakMs = (r.breakOff === true) ? 0 : 60 * 60000;
+  const totalMs = Math.max(0, r.clockOut - r.clockIn - breakMs);
+  const normalMs   = Math.min(totalMs, NORMAL_LIMIT_MS);
+  const overtimeMs = Math.max(0, totalMs - NORMAL_LIMIT_MS);
+  return { totalMs, normalMs, overtimeMs };
+}
+
+// ミリ秒 → "Xh YYm" 表示
+function fmtMs(ms) {
+  if (ms <= 0) return '0h00m';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h + 'h' + pad(m) + 'm';
+}
+
 function refreshMonthly() {
   const {year, month} = viewMonth;
   const prefix = year + '-' + pad(month);
@@ -896,12 +927,22 @@ function refreshMonthly() {
     .sort((a,b) => b.date.localeCompare(a.date));
 
   const done = recs.filter(r => r.clockIn && r.clockOut);
-  document.getElementById('totalDays').textContent  = done.length;
-  const ms = done.reduce((s,r) => {
-    const breakMs = (r.breakOff === true) ? 0 : 60 * 60000;
-    return s + (r.clockOut - r.clockIn) - breakMs;
-  }, 0);
-  document.getElementById('totalHours').textContent = Math.floor(ms/3600000);
+  document.getElementById('totalDays').textContent = done.length;
+
+  // 合計計算
+  let totalMs = 0, normalMs = 0, overtimeMs = 0;
+  done.forEach(r => {
+    const c = calcWorkMs(r);
+    totalMs    += c.totalMs;
+    normalMs   += c.normalMs;
+    overtimeMs += c.overtimeMs;
+  });
+
+  document.getElementById('totalHoursDisp').textContent   = fmtMs(totalMs);
+  document.getElementById('normalHoursDisp').textContent  = fmtMs(normalMs);
+  document.getElementById('overtimeHoursDisp').textContent = overtimeMs > 0
+    ? fmtMs(overtimeMs)
+    : '0h00m';
 
   const list = document.getElementById('recordList');
   if (!recs.length) {
@@ -910,13 +951,21 @@ function refreshMonthly() {
   }
 
   list.innerHTML = recs.map(r => {
-    const breakMin = (r.breakOff === true) ? 0 : 60;
+    const breakMin   = (r.breakOff === true) ? 0 : 60;
     const breakLabel = (r.breakOff === true) ? '休憩なし' : '休憩1h';
+    const c = calcWorkMs(r);
+    const overtimeBadge = c.overtimeMs > 0
+      ? `<span style="font-size:11px;color:#ff9500;font-weight:700;margin-left:6px;">残業 ${fmtMs(c.overtimeMs)}</span>`
+      : '';
     return `
     <div class="record-item">
       <div class="record-header">
         <div class="record-date">${r.date.slice(5).replace('-','/')}（${dayLabel(r.date)}）</div>
-        <div class="record-hours">${fmtHours(r.clockIn, r.clockOut, breakMin)} <span style="font-size:11px;color:#aeaeb2;">${breakLabel}</span></div>
+        <div class="record-hours">
+          ${fmtMs(c.totalMs)}
+          <span style="font-size:11px;color:#aeaeb2;margin-left:4px;">${breakLabel}</span>
+          ${overtimeBadge}
+        </div>
       </div>
       <div class="record-times">${fmtTime(r.clockIn)} → ${fmtTime(r.clockOut)}</div>
       ${r.report
@@ -1093,19 +1142,48 @@ function deleteEditRecord() {
 function exportInvoice() {
   const {year, month} = viewMonth;
   const prefix = year + '-' + pad(month);
-  const recs = load().records
-    .filter(r => r.date.startsWith(prefix) && r.report)
+  const allRecs = load().records
+    .filter(r => r.date.startsWith(prefix) && r.clockIn && r.clockOut)
     .sort((a,b) => a.date.localeCompare(b.date));
 
-  if (!recs.length) { toast('⚠️ 日報の記録がありません'); return; }
+  if (!allRecs.length) { toast('⚠️ 記録がありません'); return; }
 
-  const text = recs.map(r => {
+  // 月次集計
+  let totalMs = 0, normalMs = 0, overtimeMs = 0;
+  allRecs.forEach(r => {
+    const c = calcWorkMs(r);
+    totalMs    += c.totalMs;
+    normalMs   += c.normalMs;
+    overtimeMs += c.overtimeMs;
+  });
+
+  const header = [
+    '===== ' + year + '年' + month + '月 勤怠サマリー =====',
+    '出勤日数　　: ' + allRecs.length + ' 日',
+    '総勤務時間　: ' + fmtMs(totalMs),
+    '通常時間　　: ' + fmtMs(normalMs) + '（基本単価 × 1.0）',
+    '残業時間　　: ' + fmtMs(overtimeMs) + '（基本単価 × 1.25）',
+    '',
+    '===== 日別明細 =====',
+  ].join('\n');
+
+  const detail = allRecs.map(r => {
     const d = r.date.slice(5).replace('-','/');
-    return r.report.split('\n').map(l => d + '  ' + l).join('\n');
+    const c = calcWorkMs(r);
+    const breakLabel = (r.breakOff === true) ? '休憩なし' : '休憩1h';
+    const overtimeLine = c.overtimeMs > 0
+      ? `  【残業 ${fmtMs(c.overtimeMs)}】`
+      : '';
+    const workLine = d + '  ' + fmtTime(r.clockIn) + '〜' + fmtTime(r.clockOut)
+      + '  ' + fmtMs(c.totalMs) + '（' + breakLabel + '）' + overtimeLine;
+    const reportLines = r.report
+      ? r.report.split('\n').map(l => '  ' + d + '  ' + l).join('\n')
+      : '  ' + d + '  （日報なし）';
+    return workLine + '\n' + reportLines;
   }).join('\n');
 
-  copy(text);
-  toast('📋 日報をコピーしました！Claudeに貼り付けてください');
+  copy(header + '\n' + detail);
+  toast('📋 勤怠サマリー＋日報をコピーしました！');
 }
 
 function exportJSON() {

@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="勤怠・日報">
   <title>勤怠・日報 | ゆうゆうクラフト</title>
-  <meta name="app-version" content="v9">
+  <meta name="app-version" content="v10">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -896,13 +896,16 @@ function changeMonth(delta) {
 }
 
 // 勤務時間をミリ秒で返す（通常・残業に分解）
-// 1日8時間を超えた分が残業
+// 1日単位で15分未満切り捨て → 残業は8h超の分
 const NORMAL_LIMIT_MS = 8 * 3600000; // 8時間
+const UNIT_MS         = 15 * 60000;  // 15分単位
 
 function calcWorkMs(r) {
   if (!r.clockIn || !r.clockOut) return { totalMs: 0, normalMs: 0, overtimeMs: 0 };
   const breakMs = (r.breakOff === true) ? 0 : 60 * 60000;
-  const totalMs = Math.max(0, r.clockOut - r.clockIn - breakMs);
+  const rawMs   = Math.max(0, r.clockOut - r.clockIn - breakMs);
+  // 1日単位で15分未満切り捨て
+  const totalMs    = Math.floor(rawMs / UNIT_MS) * UNIT_MS;
   const normalMs   = Math.min(totalMs, NORMAL_LIMIT_MS);
   const overtimeMs = Math.max(0, totalMs - NORMAL_LIMIT_MS);
   return { totalMs, normalMs, overtimeMs };
